@@ -152,6 +152,10 @@ def generate_domain_adversarial(generator, char_to_idx, idx_to_char, maxlen, lat
     for i in range(maxlen):
         char_probs = generated[i]
         
+        # Ensure non-negative and handle NaN/Inf
+        char_probs = np.maximum(char_probs, 0)
+        char_probs = np.nan_to_num(char_probs, nan=0.0, posinf=1.0, neginf=0.0)
+
         # Apply temperature
         char_probs = np.log(char_probs + 1e-10) / temperature
         char_probs = np.exp(char_probs)
