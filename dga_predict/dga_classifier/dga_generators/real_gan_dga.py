@@ -129,7 +129,6 @@ def train_gan(domains, epochs=30, batch_size=128):
                 
                 # Sample from distribution
                 char_idx = np.random.choice(vocab_size, p=probs)
-                seq.append(char_idx)
             sequences.append(seq)
         return np.array(sequences)
     
