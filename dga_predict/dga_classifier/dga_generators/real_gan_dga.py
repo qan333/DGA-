@@ -110,9 +110,6 @@ def train_gan(domains, epochs=30, batch_size=128):
         for i in range(batch_size):
             seq = []
             for j in range(maxlen):
-                 for i in range(batch_size):
-            seq = []
-            for j in range(maxlen):
                 # Get probability distribution for this position
                 probs = generated_probs[i, j]
                 
