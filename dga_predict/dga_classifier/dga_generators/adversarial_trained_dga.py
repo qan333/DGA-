@@ -79,7 +79,7 @@ def build_detector_model(vocab_size, maxlen=20):
     model = Model(inputs=input_layer, outputs=output)
     return model
 
-def train_adversarial_generator(domains, epochs=20, batch_size=128):
+def train_adversarial_generator(domains, epochs=5, batch_size=128):
     """Train adversarial generator to bypass detector
     
     Note: Increased epochs to 50 for better adversarial training
@@ -94,7 +94,7 @@ def train_adversarial_generator(domains, epochs=20, batch_size=128):
     
     # Prepare data
     X_real = []
-    for domain in domains[:2000]:
+    for domain in domains[:1000]:  # Limit for debug speed
         seq = [char_to_idx.get(c, 0) for c in domain.lower()[:maxlen]]
         X_real.append(seq)
     X_real = pad_sequences(X_real, maxlen=maxlen, padding='pre')
@@ -110,7 +110,7 @@ def train_adversarial_generator(domains, epochs=20, batch_size=128):
     # Train detector first on real data
     y_real = np.zeros((len(X_real), 1))  # 0 = benign
     detector.compile(optimizer=Adam(0.001), loss='binary_crossentropy', metrics=['accuracy'])
-    detector.fit(X_real, y_real, epochs=10, batch_size=batch_size, verbose=0)
+    detector.fit(X_real, y_real, epochs=3, batch_size=batch_size, verbose=0)  # Reduced for debug
     
     # Adversarial training: generator tries to fool detector
     detector.trainable = False
@@ -220,8 +220,8 @@ def generate_domains_with_benign(num_domains, benign_domains, start_date=None, a
         if len(benign_domains) < 1000:
             return generate_domains_fallback(num_domains, start_date, add_tld)
         
-        # Use provided benign domains (limit to 10k for training speed)
-        training_domains = benign_domains[:5000]
+        # Use provided benign domains (limit to 1k for debug speed)
+        training_domains = benign_domains[:1000]
         generator, char_to_idx, idx_to_char = train_adversarial_generator(training_domains)
         if generator is None:
             return generate_domains_fallback(num_domains, start_date, add_tld)
@@ -275,7 +275,7 @@ def generate_domains(num_domains, start_date=None, add_tld=False, force_retrain=
         try:
             from dga_classifier import data
             data_list = data.get_data(force=False)
-            benign_domains = [d[1] for d in data_list if d[0] == 'benign'][:5000]
+            benign_domains = [d[1] for d in data_list if d[0] == 'benign'][:1000]  # Limit for debug
             
             if len(benign_domains) < 1000:
                 return generate_domains_fallback(num_domains, start_date, add_tld)

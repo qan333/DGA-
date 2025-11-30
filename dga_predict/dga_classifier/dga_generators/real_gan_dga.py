@@ -63,10 +63,12 @@ def build_generator(vocab_size, maxlen=20, latent_dim=100):
 
 def build_discriminator(vocab_size, maxlen=20):
     """Build GAN Discriminator"""
+    # Ensure maxlen is valid
+    maxlen = max(5, maxlen)
     # Use Input layer to specify input shape explicitly
     from tensorflow.keras.layers import Input
     input_layer = Input(shape=(maxlen,))
-    embedding = Embedding(vocab_size, 128)(input_layer)
+    embedding = Embedding(vocab_size, 128, input_length=maxlen)(input_layer)
     lstm = LSTM(128)(embedding)
     dense1 = Dense(64)(lstm)
     dropout = Dropout(0.5)(dense1)
@@ -75,7 +77,7 @@ def build_discriminator(vocab_size, maxlen=20):
     model = Model(inputs=input_layer, outputs=output)
     return model
 
-def train_gan(domains, epochs=30, batch_size=128):
+def train_gan(domains, epochs=5, batch_size=128):
     """Train GAN on benign domains
     
     Note: Increased epochs to 100 for better adversarial training
@@ -88,14 +90,30 @@ def train_gan(domains, epochs=30, batch_size=128):
     vocab_size = len(char_to_idx)
     maxlen = min(20, max(len(d) for d in domains))
     
+    # Filter out empty domains
+    domains = [d for d in domains if d and len(d.strip()) > 0]
+    if len(domains) < 100:
+        print("⚠ Not enough valid domains for training")
+        return None, None, None
+    
     # Prepare real data
     X_real = []
-    for domain in domains[:5000]:  # Limit for training speed
-        seq = [char_to_idx.get(c, 0) for c in domain.lower()[:maxlen]]
-        X_real.append(seq)
-    X_real = pad_sequences(X_real, maxlen=maxlen, padding='pre')
+    for domain in domains[:2000]:  # Limit for debug speed
+        if not domain or len(domain.strip()) == 0:
+            continue
+        seq = [char_to_idx.get(c, 0) for c in domain.lower()[:maxlen] if c in char_to_idx]
+        if len(seq) > 0:  # Only add non-empty sequences
+            X_real.append(seq)
     
     if len(X_real) < 100:
+        print("⚠ Not enough valid sequences after filtering")
+        return None, None, None
+    
+    X_real = pad_sequences(X_real, maxlen=maxlen, padding='pre')
+    
+    # Validate shape
+    if X_real.shape[0] == 0 or X_real.shape[1] == 0:
+        print("⚠ X_real has zero dimensions")
         return None, None, None
     
     # Build models
@@ -169,19 +187,8 @@ def train_gan(domains, epochs=30, batch_size=128):
         
         return result
     
-    # Combined model (generator + discriminator)
-    z = Input(shape=(latent_dim,))
-    generated_probs = generator(z)
-    # Reshape to (batch, maxlen, vocab_size) and sample using argmax
-    generated_reshaped = Reshape((maxlen, vocab_size))(generated_probs)
-    # Use argmax to get most likely character at each position
-    # argmax on axis=-1 reduces (batch, maxlen, vocab_size) -> (batch, maxlen)
-    generated_seqs = Lambda(lambda x: tf.argmax(x, axis=-1, output_type=tf.int32))(generated_reshaped)
-    validity = discriminator(generated_seqs)
-    
-    discriminator.trainable = False
-    combined = Model(z, validity)
-    combined.compile(optimizer=Adam(0.0002, 0.5), loss='binary_crossentropy')
+    # Generator optimizer (separate from combined model)
+    generator_optimizer = Adam(0.0002, 0.5)
     
     # Train
     valid = np.ones((batch_size, 1))
@@ -210,8 +217,9 @@ def train_gan(domains, epochs=30, batch_size=128):
         gen_seqs = sample_sequences(gen_probs, batch_size, maxlen, vocab_size)
         
         # Validate sequences before training
-        if gen_seqs.shape[1] == 0:
-            raise ValueError(f"Generated sequences have zero length! Shape: {gen_seqs.shape}")
+        if len(gen_seqs.shape) < 2 or gen_seqs.shape[1] == 0:
+            print(f"⚠ Invalid generated sequences shape: {gen_seqs.shape}, skipping batch")
+            continue
         
         # Ensure sequences are padded to maxlen for discriminator
         if gen_seqs.shape[1] < maxlen:
@@ -222,14 +230,67 @@ def train_gan(domains, epochs=30, batch_size=128):
             # Truncate sequences
             gen_seqs = gen_seqs[:, :maxlen]
         
-        d_loss_real = discriminator.train_on_batch(real_seqs, valid)
-        d_loss_fake = discriminator.train_on_batch(gen_seqs, fake)
+        # Final validation
+        if gen_seqs.shape[1] != maxlen:
+            print(f"⚠ Sequence length mismatch: {gen_seqs.shape[1]} != {maxlen}, skipping batch")
+            continue
+        
+        try:
+            d_loss_real = discriminator.train_on_batch(real_seqs, valid)
+            d_loss_fake = discriminator.train_on_batch(gen_seqs, fake)
+        except Exception as e:
+            print(f"⚠ Error training discriminator: {e}, skipping batch")
+            continue
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
         
-        # Train Generator
+        # Train Generator using REINFORCE (policy gradient)
+        # Since argmax is non-differentiable, we use REINFORCE algorithm
         discriminator.trainable = False
-        noise = np.random.normal(0, 1, (batch_size, latent_dim))
-        g_loss = combined.train_on_batch(noise, valid)
+        noise = tf.random.normal((batch_size, latent_dim))
+        
+        with tf.GradientTape() as gen_tape:
+            # Generate probabilities
+            gen_probs = generator(noise, training=True)
+            gen_probs_reshaped = tf.reshape(gen_probs, (batch_size, maxlen, vocab_size))
+            gen_probs_reshaped = tf.nn.softmax(gen_probs_reshaped, axis=-1)  # Normalize
+            
+            # Sample sequences and compute log probabilities (differentiable)
+            gen_indices_list = []
+            log_probs_list = []
+            for i in range(batch_size):
+                seq_indices = []
+                seq_log_probs = []
+                for j in range(maxlen):
+                    probs_j = gen_probs_reshaped[i, j, :]
+                    # Sample (non-differentiable, but we'll use log_probs for gradient)
+                    sampled_idx = tf.random.categorical(tf.expand_dims(tf.math.log(probs_j + 1e-10), 0), 1)[0, 0]
+                    seq_indices.append(sampled_idx)
+                    # Log probability (differentiable w.r.t. probs_j)
+                    log_prob = tf.math.log(probs_j[sampled_idx] + 1e-10)
+                    seq_log_probs.append(log_prob)
+                gen_indices_list.append(seq_indices)
+                log_probs_list.append(tf.reduce_sum(seq_log_probs))
+            
+            gen_indices = tf.cast(tf.stack([tf.stack(seq) for seq in gen_indices_list]), tf.int32)
+            gen_log_probs = tf.stack(log_probs_list)  # (batch_size,)
+            
+            # Get discriminator reward (non-differentiable path)
+            disc_pred = discriminator(gen_indices, training=False)
+            rewards = tf.squeeze(disc_pred)  # (batch_size,)
+            
+            # REINFORCE: loss = -mean(log_prob * reward)
+            # We want to maximize reward, so minimize -log_prob * reward
+            gen_loss = -tf.reduce_mean(gen_log_probs * rewards)
+        
+        # Calculate gradients
+        gen_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
+        gen_gradients = [g for g in gen_gradients if g is not None]
+        if len(gen_gradients) > 0:
+            generator_optimizer.apply_gradients(zip(gen_gradients, generator.trainable_variables))
+            g_loss = gen_loss.numpy()
+        else:
+            g_loss = 0.0
+            print("⚠ No gradients for generator, skipping update")
         
         if epoch % 10 == 0:
             print(f"  Epoch {epoch}: D_loss={d_loss[0]:.4f}, G_loss={g_loss:.4f}")
@@ -321,8 +382,8 @@ def generate_domains_with_benign(num_domains, benign_domains, start_date=None, a
         if len(benign_domains) < 1000:
             return generate_domains_fallback(num_domains, start_date, add_tld)
         
-        # Use provided benign domains (limit to 20k for training speed)
-        training_domains = benign_domains[:10000]
+        # Use provided benign domains (limit to 2k for debug speed)
+        training_domains = benign_domains[:2000]
         generator, char_to_idx, idx_to_char = train_gan(training_domains)
         if generator is None:
             return generate_domains_fallback(num_domains, start_date, add_tld)
@@ -376,7 +437,7 @@ def generate_domains(num_domains, start_date=None, add_tld=False, force_retrain=
         try:
             from dga_classifier import data
             data_list = data.get_data(force=False)
-            benign_domains = [d[1] for d in data_list if d[0] == 'benign'][:20000]
+            benign_domains = [d[1] for d in data_list if d[0] == 'benign'][:2000]
             
             if len(benign_domains) < 1000:
                 return generate_domains_fallback(num_domains, start_date, add_tld)
