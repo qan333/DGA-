@@ -54,7 +54,8 @@ def main():
     print("=" * 60)
     
     # Generate data with force=True
-    data.gen_data(force=True, num_per_dga=5000)
+    # num_per_dga=10000 → 30 × 10000 = 300,000 malicious + 300,000 benign = ~600K total
+    data.gen_data(force=True, num_per_dga=10000)
     
     print("\n" + "=" * 60)
     print("✓ DATA GENERATION COMPLETE")

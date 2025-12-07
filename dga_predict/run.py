@@ -9,6 +9,7 @@ import pickle
 import argparse
 import random
 import csv
+import time
 
 import numpy as np
 import matplotlib
@@ -48,22 +49,35 @@ def run_experiments(is_manualrf=True, islstm=True, istransformer=False, nfolds=1
 
     set_seed(seed)
     results = {'manualrf': None, 'lstm': None, 'transformer': None}
+    timings = {'manualrf': 0, 'lstm': 0, 'transformer': 0}
 
     if is_manualrf:
         print("\n=== Running Manual Statistical Features + RandomForest ===")
+        start_time = time.time()
         results['manualrf'] = manualrf.run(nfolds=nfolds)
+        timings['manualrf'] = time.time() - start_time
+        print(f"✓ ManualRF completed in {timings['manualrf']:.2f}s")
 
     gc.collect()
 
     if islstm:
         print("\n=== Running LSTM Deep Model ===")
+        start_time = time.time()
         results['lstm'] = lstm.run(nfolds=nfolds)
+        timings['lstm'] = time.time() - start_time
+        print(f"✓ LSTM completed in {timings['lstm']:.2f}s")
 
     gc.collect()
 
     if istransformer:
         print("\n=== Running Transformer Deep Model ===")
+        start_time = time.time()
         results['transformer'] = transformer.run(nfolds=nfolds)
+        timings['transformer'] = time.time() - start_time
+        print(f"✓ Transformer completed in {timings['transformer']:.2f}s")
+
+    # Store timings in results for later use
+    results['__timings__'] = timings
 
     with open(RESULT_FILE, 'wb') as f:
         pickle.dump(results, f)
@@ -100,12 +114,16 @@ def summarize_results_arr(results):
     return fpr, tpr, metrics
 
 
-def save_metrics_csv(metrics_dict, out=METRICS_CSV):
-    """Save metrics for all models to CSV"""
+def save_metrics_csv(metrics_dict, timings_dict=None, out=METRICS_CSV):
+    """Save metrics for all models to CSV with execution time"""
+    if timings_dict is None:
+        timings_dict = {}
+    
     rows = []
     for model_name, metrics in metrics_dict.items():
         if metrics is None:
             continue
+        timing = timings_dict.get(model_name, 0)
         rows.append({
             'model': model_name,
             'accuracy': metrics['accuracy'],
@@ -113,10 +131,11 @@ def save_metrics_csv(metrics_dict, out=METRICS_CSV):
             'recall': metrics['recall'],
             'f1': metrics['f1'],
             'auc': metrics['auc'],
+            'execution_time_seconds': f"{timing:.2f}",
             'confusion_matrix': metrics['confusion_matrix']
         })
     with open(out, 'w', newline='') as csvfile:
-        fieldnames = ['model','accuracy','precision','recall','f1','auc','confusion_matrix']
+        fieldnames = ['model','accuracy','precision','recall','f1','auc','execution_time_seconds','confusion_matrix']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:
@@ -174,7 +193,9 @@ def create_figs(force=False, nfolds=10, models=('manualrf','lstm'), seed=42):
     plt.savefig('roc.png', dpi=300)
     print("✓ ROC curve saved to roc.png")
 
-    save_metrics_csv(metrics_out, METRICS_CSV)
+    # Extract timings from results
+    timings_out = results.get('__timings__', {})
+    save_metrics_csv(metrics_out, timings_out, METRICS_CSV)
     return metrics_out
 
 
