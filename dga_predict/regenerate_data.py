@@ -18,7 +18,7 @@ def main():
     print("  2. Get benign domains FIRST")
     print("  3. Train Real ML-based DGAs on benign domains")
     print("  4. Generate malicious domains using trained models")
-    print("  5. Create final dataset")
+    print("  5. Create final dataset: 700K benign + 700 DGA")
     print("\n⚠ This may take 10-30 minutes depending on your system...")
     print("✓ Starting automatically...\n")
     
@@ -54,8 +54,8 @@ def main():
     print("=" * 60)
     
     # Generate data with force=True
-    # num_per_dga=10000 → 30 × 10000 = 300,000 malicious + 300,000 benign = ~600K total
-    data.gen_data(force=True, num_per_dga=10000)
+    # num_per_dga=23 → 30 × 23 ≈ 700 malicious + 700,000 benign = ~700.7K total
+    data.gen_data(force=True, num_per_dga=23)
     
     print("\n" + "=" * 60)
     print("✓ DATA GENERATION COMPLETE")
