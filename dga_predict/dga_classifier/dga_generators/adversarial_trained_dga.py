@@ -242,7 +242,7 @@ def generate_domains_with_benign(num_domains, benign_domains, start_date=None, a
     char_to_idx = None
     idx_to_char = None
     maxlen = 20
-    latent_dim = 100
+    latent_dim = 200  # Match training latent_dim
     
     if not force_retrain and os.path.exists(MODEL_FILE) and os.path.exists(VOCAB_FILE):
         try:
@@ -263,6 +263,7 @@ def generate_domains_with_benign(num_domains, benign_domains, start_date=None, a
         generator, char_to_idx, idx_to_char = train_adversarial_generator(training_domains)
         if generator is None:
             return generate_domains_fallback(num_domains, start_date, add_tld)
+        latent_dim = 200  # Match training latent_dim
     
     # Generate domains
     domains = []
@@ -297,7 +298,7 @@ def generate_domains(num_domains, start_date=None, add_tld=False, force_retrain=
     char_to_idx = None
     idx_to_char = None
     maxlen = 20
-    latent_dim = 100
+    latent_dim = 200  # Match training latent_dim
     
     if not force_retrain and os.path.exists(MODEL_FILE) and os.path.exists(VOCAB_FILE):
         try:
