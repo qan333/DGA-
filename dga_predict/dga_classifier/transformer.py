@@ -139,7 +139,7 @@ def run(max_epoch=20, nfolds=5, batch_size=128):
     # Build character vocabulary
     valid_chars = {x: idx + 1 for idx, x in enumerate(set(''.join(X_raw)))}
     max_features = len(valid_chars) + 1
-    maxlen = np.max([len(x) for x in X_raw])
+    maxlen = min(np.max([len(x) for x in X_raw]), 50)  # Cap at 50 to avoid memory issues
 
     X = [[valid_chars[c] for c in s] for s in X_raw]
     X = sequence.pad_sequences(X, maxlen=maxlen)
