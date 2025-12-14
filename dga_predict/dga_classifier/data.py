@@ -225,24 +225,33 @@ def gen_malicious_core(num_per_dga=15000, benign_domains=None):
 # Stub families (bamital, bedep, beebone, etc.) are no longer used
 
 
-def gen_data(force=False, num_per_dga=15000):
-    """Generate ~1M domain dataset (11 STRONG DGAs only, no stub families)"""
+def gen_data(force=False, num_per_dga=15000, benign_malicious_ratio=1000):
+    """Generate dataset with realistic benign:malicious ratio (default 1000:1)
+    
+    Args:
+        force: Force regeneration
+        num_per_dga: Number of DGA domains per family
+        benign_malicious_ratio: Ratio of benign to malicious (default 1000 = realistic)
+    """
     if force or not os.path.isfile(DATA_FILE):
         print("\n" + "="*60)
-        print("GENERATING TRAINING DATA (~1M domains)")
+        print("GENERATING TRAINING DATA WITH REALISTIC RATIO")
         print("="*60)
 
-        # Get benign domains FIRST to avoid circular dependency
-        # Calculate domains per strong DGA to maintain same total as before
-        # Before: 30 families (11 strong + 19 stub) × num_per_dga = total
-        # Now: 11 strong families × num_per_strong_dga = total (same as before)
-        total_malicious_domains = 30 * num_per_dga  # Keep same total as before (30 families)
-        num_per_strong_dga = total_malicious_domains // 11  # Distribute across 11 strong families
-        estimated_malicious = total_malicious_domains
+        # Calculate malicious domains
+        total_malicious_domains = 30 * num_per_dga
+        num_per_strong_dga = total_malicious_domains // 11
+        
+        # Calculate benign domains based on realistic ratio
+        total_benign_domains = total_malicious_domains * benign_malicious_ratio
+        
+        print(f"Benign:Malicious Ratio: {benign_malicious_ratio}:1 (Realistic)")
         print(f"Using only STRONG DGA families (11 families, ~{num_per_strong_dga:,} domains each)")
-        print(f"Total malicious domains: {total_malicious_domains:,} (same as 30 families × {num_per_dga:,})")
-        print("Getting benign domains first (for Real ML-based DGAs training)...")
-        benign = get_alexa(estimated_malicious)
+        print(f"  - Malicious domains: {total_malicious_domains:,}")
+        print(f"  - Benign domains: {total_benign_domains:,}")
+        print(f"  - Total domains: {total_malicious_domains + total_benign_domains:,}")
+        print("\nGetting benign domains first (for Real ML-based DGAs training)...")
+        benign = get_alexa(total_benign_domains)
         
         # Now generate malicious domains with benign domains available (only strong DGAs)
         d1, l1 = gen_malicious_core(num_per_strong_dga, benign_domains=benign)
@@ -257,9 +266,14 @@ def gen_data(force=False, num_per_dga=15000):
         data = list(zip(labels, domains))
         random.shuffle(data)
 
-        print(f"\n✓ Total domains: {len(domains)}")
-        print(f"  - Malicious: {len([x for x in labels if x!='benign'])}")
-        print(f"  - Benign: {labels.count('benign')}")
+        print(f"\n✓ DATASET STATISTICS:")
+        print(f"  - Total domains: {len(domains):,}")
+        malicious_count = len([x for x in labels if x!='benign'])
+        benign_count = labels.count('benign')
+        print(f"  - Malicious: {malicious_count:,} ({100*malicious_count/len(domains):.3f}%)")
+        print(f"  - Benign: {benign_count:,} ({100*benign_count/len(domains):.3f}%)")
+        actual_ratio = benign_count/malicious_count if malicious_count > 0 else 0
+        print(f"  - Actual ratio: {actual_ratio:.1f}:1")
 
         print(f"\nSaving to {DATA_FILE}...")
         with open(DATA_FILE, "wb") as f:
@@ -269,8 +283,8 @@ def gen_data(force=False, num_per_dga=15000):
         print(f"{DATA_FILE} already exists — use get_data(force=True) to regenerate.")
 
 
-def get_data(force=False, num_per_dga=15000):
+def get_data(force=False, num_per_dga=15000, benign_malicious_ratio=1000):
     """Return dataset as list of (label, domain)"""
-    gen_data(force=force, num_per_dga=num_per_dga)
+    gen_data(force=force, num_per_dga=num_per_dga, benign_malicious_ratio=benign_malicious_ratio)
     with open(DATA_FILE, "rb") as f:
         return pickle.load(f)
