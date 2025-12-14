@@ -63,7 +63,7 @@ def prepare_sequences(domains, char_to_idx, maxlen=20):
         return np.array([]).reshape(0, maxlen)
     return pad_sequences(sequences, maxlen=maxlen, padding='pre')
 
-def build_lstm_generator(vocab_size, embedding_dim=128, lstm_units=256, maxlen=20):
+def build_lstm_generator(vocab_size, embedding_dim=256, lstm_units=512, maxlen=20):
     """Build LSTM generator model"""
     # Ensure maxlen is valid
     maxlen = max(5, maxlen)
@@ -76,7 +76,7 @@ def build_lstm_generator(vocab_size, embedding_dim=128, lstm_units=256, maxlen=2
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy')
     return model
 
-def train_lstm_generator(domains, epochs=5, batch_size=128):
+def train_lstm_generator(domains, epochs=20, batch_size=64):
     """Train LSTM generator on benign domains
     
     Note: Increased epochs to 100 for better learning of benign patterns
@@ -147,7 +147,7 @@ def train_lstm_generator(domains, epochs=5, batch_size=128):
     print(f"✓ LSTM generator trained and saved")
     return model, char_to_idx, idx_to_char
 
-def generate_domain_lstm(model, char_to_idx, idx_to_char, maxlen, seed=None, temperature=0.8, max_length=15):
+def generate_domain_lstm(model, char_to_idx, idx_to_char, maxlen, seed=None, temperature=1.0, max_length=15):
     """Generate domain using trained LSTM"""
     if seed:
         random.seed(seed)

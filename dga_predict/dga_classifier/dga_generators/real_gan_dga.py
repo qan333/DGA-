@@ -51,12 +51,12 @@ def build_char_vocab(domains):
     idx_to_char = {idx: char for char, idx in char_to_idx.items()}
     return char_to_idx, idx_to_char
 
-def build_generator(vocab_size, maxlen=20, latent_dim=100):
+def build_generator(vocab_size, maxlen=20, latent_dim=200):
     """Build GAN Generator - outputs sequences directly"""
     model = Sequential([
-        Dense(256, input_dim=latent_dim, activation='relu'),
-        Dense(512, activation='relu'),
-        Dense(maxlen * 128, activation='relu'),
+        Dense(512, input_dim=latent_dim, activation='relu'),
+        Dense(1024, activation='relu'),
+        Dense(maxlen * 256, activation='relu'),
         Dense(maxlen * vocab_size, activation='softmax')
     ])
     return model
@@ -68,16 +68,16 @@ def build_discriminator(vocab_size, maxlen=20):
     # Use Input layer to specify input shape explicitly
     from tensorflow.keras.layers import Input
     input_layer = Input(shape=(maxlen,))
-    embedding = Embedding(vocab_size, 128, input_length=maxlen)(input_layer)
-    lstm = LSTM(128)(embedding)
-    dense1 = Dense(64)(lstm)
+    embedding = Embedding(vocab_size, 256, input_length=maxlen)(input_layer)
+    lstm = LSTM(256)(embedding)
+    dense1 = Dense(128)(lstm)
     dropout = Dropout(0.5)(dense1)
     output = Dense(1, activation='sigmoid')(dropout)
     
     model = Model(inputs=input_layer, outputs=output)
     return model
 
-def train_gan(domains, epochs=5, batch_size=128):
+def train_gan(domains, epochs=20, batch_size=64):
     """Train GAN on benign domains
     
     Note: Increased epochs to 100 for better adversarial training

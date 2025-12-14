@@ -52,14 +52,14 @@ def build_char_vocab(domains):
     idx_to_char = {idx: char for char, idx in char_to_idx.items()}
     return char_to_idx, idx_to_char
 
-def build_adversarial_generator(vocab_size, maxlen=20, latent_dim=100):
+def build_adversarial_generator(vocab_size, maxlen=20, latent_dim=200):
     """Build generator optimized to bypass detection"""
     model = Sequential([
-        Dense(256, input_dim=latent_dim, activation='relu'),
-        Dropout(0.3),
-        Dense(512, activation='relu'),
+        Dense(512, input_dim=latent_dim, activation='relu'),
         Dropout(0.3),
         Dense(1024, activation='relu'),
+        Dropout(0.3),
+        Dense(2048, activation='relu'),
         Dense(maxlen * vocab_size),
         Dense(maxlen * vocab_size, activation='softmax')
     ])
@@ -69,20 +69,20 @@ def build_detector_model(vocab_size, maxlen=20):
     """Build detector model (simulates detection system)"""
     # Use Input layer to specify input shape explicitly
     input_layer = Input(shape=(maxlen,))
-    embedding = Embedding(vocab_size, 128)(input_layer)
-    lstm1 = LSTM(128, return_sequences=True)(embedding)
-    lstm2 = LSTM(64)(lstm1)
+    embedding = Embedding(vocab_size, 256)(input_layer)
+    lstm1 = LSTM(256, return_sequences=True)(embedding)
+    lstm2 = LSTM(128)(lstm1)
     dropout = Dropout(0.5)(lstm2)
-    dense1 = Dense(32, activation='relu')(dropout)
+    dense1 = Dense(64, activation='relu')(dropout)
     output = Dense(1, activation='sigmoid')(dense1)  # 0 = benign, 1 = DGA
     
     model = Model(inputs=input_layer, outputs=output)
     return model
 
-def train_adversarial_generator(domains, epochs=5, batch_size=128):
+def train_adversarial_generator(domains, epochs=20, batch_size=64):
     """Train adversarial generator to bypass detector
     
-    Note: Reduced epochs to 5 for faster debug
+    Note: Increased epochs to 20 for better training
     """
     print(f"Training adversarial generator on {len(domains)} benign domains ({epochs} epochs)...")
     print("  (Using CPU if GPU unavailable - this may take longer)")
@@ -103,14 +103,14 @@ def train_adversarial_generator(domains, epochs=5, batch_size=128):
         return None, None, None
     
     # Build models
-    latent_dim = 100
+    latent_dim = 200
     generator = build_adversarial_generator(vocab_size, maxlen, latent_dim)
     detector = build_detector_model(vocab_size, maxlen)
     
     # Train detector first on real data
     y_real = np.zeros((len(X_real), 1))  # 0 = benign
     detector.compile(optimizer=Adam(0.001), loss='binary_crossentropy', metrics=['accuracy'])
-    detector.fit(X_real, y_real, epochs=3, batch_size=batch_size, verbose=0)  # Reduced for debug
+    detector.fit(X_real, y_real, epochs=10, batch_size=batch_size, verbose=0)
     
     # Adversarial training: generator tries to fool detector
     detector.trainable = False
