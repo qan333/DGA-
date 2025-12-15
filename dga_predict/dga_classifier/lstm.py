@@ -6,6 +6,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Activation, Embedding, LSTM
 from sklearn import metrics
 from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.utils import class_weight
 
 
 def build_model(max_features, maxlen):
@@ -48,12 +49,25 @@ def run(max_epoch=20, nfolds=5, batch_size=128):
     # --- TRAIN LOOP ---
     for fold, (X_train, X_test, y_train, y_test) in enumerate(folds, start=1):
         print(f"\nFold {fold}/{len(folds)}")
+        
+        # Calculate class weights for imbalanced data (Cost-sensitive learning)
+        classes = np.unique(y_train)
+        weights = class_weight.compute_class_weight('balanced', classes=classes, y=y_train)
+        class_weight_dict = {cls: w for cls, w in zip(classes, weights)}
+        
+        benign_count = np.sum(y_train == 0)
+        malicious_count = np.sum(y_train == 1)
+        ratio = malicious_count / benign_count if benign_count > 0 else 0
+        print(f"  Dataset: {benign_count} benign, {malicious_count} malicious (ratio={ratio:.4f})")
+        print(f"  Class weights: benign={class_weight_dict[0]:.4f}, malicious={class_weight_dict[1]:.4f}")
+        
         model = build_model(max_features, maxlen)
         best_auc, best_iter = 0.0, -1
         out_data = {}
 
         for ep in range(max_epoch):
-            model.fit(X_train, y_train, batch_size=batch_size, epochs=1, verbose=0)
+            model.fit(X_train, y_train, batch_size=batch_size, epochs=1, verbose=0,
+                     class_weight=class_weight_dict)
             preds = model.predict(X_test, verbose=0)
             t_auc = metrics.roc_auc_score(y_test, preds)
             print(f"Epoch {ep}: auc={t_auc:.6f} (best={best_auc:.6f})")

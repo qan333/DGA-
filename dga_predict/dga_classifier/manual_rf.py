@@ -62,11 +62,19 @@ def run(nfolds=10, n_estimators=100):
     # --- TRAIN LOOP ---
     for fold, (X_train, X_test, y_train, y_test) in enumerate(folds, start=1):
         print(f"\nFold {fold}/{len(folds)}")
-        print("Training RandomForest...")
+        
+        # Calculate class weights for imbalanced data (Cost-sensitive learning)
+        benign_count = np.sum(y_train == 0)
+        malicious_count = np.sum(y_train == 1)
+        ratio = malicious_count / benign_count if benign_count > 0 else 0
+        print(f"  Dataset: {benign_count} benign, {malicious_count} malicious (ratio={ratio:.4f})")
+        
+        print("Training RandomForest with class weights (Cost-sensitive learning)...")
         clf = RandomForestClassifier(
             n_estimators=n_estimators,
             max_depth=None,
             min_samples_split=2,
+            class_weight='balanced',  # Automatic class weighting
             random_state=42,
             n_jobs=-1
         )
