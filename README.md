@@ -1,4 +1,4 @@
-# DGA Classifier - Phân Loại Miền Tên Tạo Bằng Thuật Toán DGA
+# Domain Generation Algorithm Detection: A Comparative Analysis of LSTM, Transformer, and Feature-Based Approaches
 
 ## 📋 Mô Tả Dự Án
 
